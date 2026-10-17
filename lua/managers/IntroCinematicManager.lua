@@ -1084,7 +1084,8 @@ if not IntroCinematicManager then
     end
 
     function IntroCinematicManager:delay_hook()
-        if self.map_data then
+        -- map_data/waiting_state outlive the cinematic, only act while one is playing
+        if self._playing and self.map_data then
             self.waiting_state._delay_start_t = self.starting_time + self.map_data.length
         end
     end
