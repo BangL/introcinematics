@@ -1,7 +1,7 @@
 {
-	"name": "Intro Cinematics By ThuverX",
+	"name": "Intro Cinematics",
 	"description": "Intro Cinematics add cinematics to Payday 2",
-	"author": "ThuverX",
+	"author": "vaultboy/ThuverX",
 	"contact": "https://discord.gg/QH8U8m9",
 	"version": "128",
 	"priority": 0,

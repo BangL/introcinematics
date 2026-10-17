@@ -147,11 +147,387 @@ if not IntroCinematicManager then
         self.dialog_meta_data = data
     end
 
+
+
+    function IntroCinematicManager:_safe_call(func, ...)
+        if not func then
+            return nil
+        end
+
+        local ok, result = pcall(func, ...)
+
+        if ok then
+            return result
+        end
+
+        return nil
+    end
+
+    function IntroCinematicManager:_unit_key(unit)
+        if not alive(unit) then
+            return nil
+        end
+
+        if unit.key then
+            local key = self:_safe_call(function()
+                return unit:key()
+            end)
+
+            if key then
+                return key
+            end
+        end
+
+        local unit_data = nil
+
+        if unit.unit_data then
+            unit_data = self:_safe_call(function()
+                return unit:unit_data()
+            end)
+        end
+
+        if unit_data and unit_data.unit_id then
+            return "unit_id_" .. tostring(unit_data.unit_id)
+        end
+
+        return tostring(unit)
+    end
+
+    function IntroCinematicManager:_unit_visible(unit)
+        if not alive(unit) or not unit.visible then
+            return true
+        end
+
+        local visible = self:_safe_call(function()
+            return unit:visible()
+        end)
+
+        if visible == nil then
+            return true
+        end
+
+        return visible and true or false
+    end
+
+    function IntroCinematicManager:_set_unit_skip_occlusion(unit, skip)
+        if not alive(unit) or not unit.get_objects_by_type then
+            return
+        end
+
+        local objects = self:_safe_call(function()
+            return unit:get_objects_by_type(Idstring("model"))
+        end)
+
+        if not objects then
+            return
+        end
+
+        for _, obj in pairs(objects) do
+            if obj and obj.set_skip_occlusion then
+                self:_safe_call(function()
+                    obj:set_skip_occlusion(skip)
+                end)
+            end
+        end
+    end
+
+    function IntroCinematicManager:_protect_unit_from_cinematic_culling(unit, force)
+        local lock = self._cinematic_culling_lock
+
+        if not lock or not alive(unit) then
+            return
+        end
+
+        if not force and not self:_unit_visible(unit) then
+            return
+        end
+
+        local key = self:_unit_key(unit)
+
+        if not key or lock.seen[key] then
+            return
+        end
+
+        lock.seen[key] = true
+
+        local already_skip = false
+
+        if managers.occlusion and managers.occlusion._skip_occlusion then
+            already_skip = managers.occlusion._skip_occlusion[key] and true or false
+        end
+
+        local used_manager = false
+
+        if managers.occlusion and managers.occlusion.remove_occlusion then
+            used_manager = self:_safe_call(function()
+                managers.occlusion:remove_occlusion(unit)
+                return true
+            end) and true or false
+        end
+
+        if not used_manager then
+            self:_set_unit_skip_occlusion(unit, true)
+        end
+
+        if not already_skip then
+            table.insert(lock.restore_units, unit)
+        end
+    end
+
+    function IntroCinematicManager:_refresh_cinematic_culling_lock(t, force)
+        local lock = self._cinematic_culling_lock
+
+        if not lock or not World or not World.find_units_quick then
+            return
+        end
+
+        t = t or 0
+
+        -- Full cinematic occlusion shutdown: do not force hidden units visible, but do
+        -- mark currently loaded model objects to skip occlusion while the intro is active.
+        -- This is throttled heavily; the first pass does the real work, later passes only
+        -- catch late-spawned/late-streamed units with a much lower FPS cost during the cinematic.
+        if not force and t < (lock.next_refresh_t or 0) then
+            return
+        end
+
+        lock.next_refresh_t = t + 4.0
+
+        local units = self:_safe_call(function()
+            return World:find_units_quick("all")
+        end)
+
+        if not units then
+            return
+        end
+
+        for _, unit in pairs(units) do
+            self:_protect_unit_from_cinematic_culling(unit, true)
+        end
+    end
+
+    function IntroCinematicManager:_begin_cinematic_culling_lock()
+        self._cinematic_culling_lock = {
+            restore_units = {},
+            seen = {},
+            next_refresh_t = 0
+        }
+
+        self:_refresh_cinematic_culling_lock(0, true)
+    end
+
+    function IntroCinematicManager:_end_cinematic_culling_lock()
+        local lock = self._cinematic_culling_lock
+
+        if not lock then
+            return
+        end
+
+        self._cinematic_culling_lock = nil
+
+        for _, unit in pairs(lock.restore_units or {}) do
+            if alive(unit) then
+                local used_manager = false
+
+                if managers.occlusion and managers.occlusion.add_occlusion then
+                    used_manager = self:_safe_call(function()
+                        managers.occlusion:add_occlusion(unit)
+                        return true
+                    end) and true or false
+                end
+
+                if not used_manager then
+                    self:_set_unit_skip_occlusion(unit, false)
+                end
+            end
+        end
+    end
+
+    function IntroCinematicManager:_safe_set_unit_visible(unit, visible)
+        if alive(unit) and unit.set_visible then
+            self:_safe_call(function()
+                unit:set_visible(visible)
+            end)
+        end
+    end
+
+    function IntroCinematicManager:_is_intro_hidden_unit(unit)
+        if not alive(unit) or not self.mem or not self.mem.hidden_units then
+            return false
+        end
+
+        for _, hidden_unit in pairs(self.mem.hidden_units) do
+            if hidden_unit == unit then
+                return true
+            end
+        end
+
+        return false
+    end
+
+    function IntroCinematicManager:_show_portal_unit_for_cinematic(unit)
+        if not alive(unit) or self:_is_intro_hidden_unit(unit) then
+            return
+        end
+
+        self:_safe_set_unit_visible(unit, true)
+    end
+
+    function IntroCinematicManager:_show_portal_units_for_cinematic()
+        local portal = managers.portal
+
+        if not portal then
+            return
+        end
+
+        if portal._portal_shapes then
+            for _, shape in pairs(portal._portal_shapes) do
+                if shape and shape._units then
+                    for _, unit in pairs(shape._units) do
+                        self:_show_portal_unit_for_cinematic(unit)
+                    end
+                end
+            end
+        end
+
+        if portal._unit_groups then
+            for _, group in pairs(portal._unit_groups) do
+                if group and group._units then
+                    for _, unit in pairs(group._units) do
+                        self:_show_portal_unit_for_cinematic(unit)
+                    end
+                end
+            end
+        end
+
+        -- Keep units visible during the cinematic, but do NOT clear _hide_list.
+        -- Leaving it intact lets the normal portal renderer hide those units again
+        -- immediately after the cutscene lock is restored.
+        if portal._hide_list then
+            for _, unit in pairs(portal._hide_list) do
+                self:_show_portal_unit_for_cinematic(unit)
+            end
+        end
+    end
+
+    function IntroCinematicManager:_begin_portal_cinematic_lock()
+        if self._portal_cinematic_lock or not managers.portal then
+            return
+        end
+
+        local portal = managers.portal
+        local lock = {
+            portal = portal,
+            render = portal.render,
+            add_to_hide_list = portal.add_to_hide_list,
+            change_visibility = portal.change_visibility
+        }
+
+        self._portal_cinematic_lock = lock
+        self._next_portal_cinematic_refresh_t = 0
+
+        local manager = self
+
+        portal.render = function(portal_self, ...)
+            -- Do not run the normal portal render/hide pass during the cinematic.
+            -- The previous build refreshed every frame here, which fixed culling but
+            -- could tank FPS on portal-heavy maps. This keeps the portal pass disabled
+            -- and only refreshes existing portal units rarely for safety.
+            local now = 0
+
+            if TimerManager and TimerManager.main then
+                now = TimerManager:main():time() or 0
+            end
+
+            if now >= (manager._next_portal_cinematic_refresh_t or 0) then
+                manager._next_portal_cinematic_refresh_t = now + 3.0
+                manager:_show_portal_units_for_cinematic()
+            end
+        end
+
+        portal.add_to_hide_list = function(portal_self, unit)
+            if lock.add_to_hide_list then
+                manager:_safe_call(function()
+                    lock.add_to_hide_list(portal_self, unit)
+                end)
+            end
+
+            manager:_show_portal_unit_for_cinematic(unit)
+        end
+
+        portal.change_visibility = function(portal_self, unit, i, inverse)
+            if lock.change_visibility then
+                manager:_safe_call(function()
+                    lock.change_visibility(portal_self, unit, i, inverse)
+                end)
+            end
+
+            manager:_show_portal_unit_for_cinematic(unit)
+        end
+
+        self:_show_portal_units_for_cinematic()
+    end
+
+    function IntroCinematicManager:_end_portal_cinematic_lock()
+        local lock = self._portal_cinematic_lock
+
+        if not lock then
+            return
+        end
+
+        self._portal_cinematic_lock = nil
+        self._next_portal_cinematic_refresh_t = nil
+
+        local portal = lock.portal
+
+        if portal then
+            portal.render = lock.render
+            portal.add_to_hide_list = lock.add_to_hide_list
+            portal.change_visibility = lock.change_visibility
+        end
+    end
+
+    function IntroCinematicManager:_sync_waiting_camera_to_cinematic_camera()
+        if not alive(self._waiting_cam_unit) or not alive(self.cine_cam_unit) or self._waiting_cam_unit == self.cine_cam_unit then
+            return
+        end
+
+        local pos = self:_safe_call(function()
+            return self.cine_cam_unit:position()
+        end)
+
+        local rot = self:_safe_call(function()
+            return self.cine_cam_unit:rotation()
+        end)
+
+        if pos then
+            self:_safe_call(function()
+                self._waiting_cam_unit:set_position(pos)
+            end)
+        end
+
+        if rot then
+            self:_safe_call(function()
+                self._waiting_cam_unit:set_rotation(rot)
+            end)
+        end
+    end
+
     function IntroCinematicManager:play(waiting_state,map)
         local map_data = get_level_data(map)
         if not map_data then
             return
         end
+
+        -- Guard against duplicate sync_start calls or multiple installed copies of the
+        -- mod starting the same cinematic twice. Duplicate active viewports look like a
+        -- translucent second intro rendered over the first.
+        if self._playing and not self.done then
+            return
+        end
+
+        self._playing = true
+        self.done = false
         
         self.waiting_state = waiting_state
         self.map_data = map_data
@@ -169,18 +545,32 @@ if not IntroCinematicManager then
         managers.hud:hide(waiting_state.LEVEL_INTRO_GUI)
         
         waiting_state._camera_data.next_t = 9999999
-        waiting_state._cam_unit:set_position(Vector3(0,0,-90000))
-        waiting_state._cam_unit:camera():start(999999)
-        waiting_state._cam_unit:camera()._viewport:set_active(false)
+        self._waiting_cam_unit = waiting_state._cam_unit
+
+        -- Keep a single render viewport: the custom cinematic camera renders the intro,
+        -- while the stock waiting camera stays inactive but follows the cinematic camera
+        -- position for any vanilla portal/occlusion checks that still read it.
+        -- The original mod moved this stock camera to z = -90000, which can make some
+        -- maps cull the playable space and leave the cinematic looking into a void.
+        local waiting_camera_ext = waiting_state._cam_unit and waiting_state._cam_unit:camera()
+
+        if waiting_camera_ext then
+            waiting_camera_ext:start(999999)
+
+            if waiting_camera_ext._viewport then
+                waiting_camera_ext._viewport:set_active(false)
+            end
+        end
 
         self.cine_cam_unit = CoreUnit.safe_spawn_unit("introcinematics/units/camera/cinematic_camera", Vector3(), Rotation())
         self.cine_cam = self.cine_cam_unit:camera():camera()
 
         self.cine_cam_unit:camera():set_active(true)
         self._cine_active = true
-        
+        self:_begin_portal_cinematic_lock()
+        self:_begin_cinematic_culling_lock()
+
         self.starting_time = -1
-        self.done = false
 
         local billboard = nil
         if map_data.hologram.align == "billboard_x" then
@@ -373,6 +763,7 @@ if not IntroCinematicManager then
                                     if unit.set_visible then unit:set_visible(true)
                                     else unit:set_enabled(true) end
 
+                                    self:_protect_unit_from_cinematic_culling(unit, true)
                                     self.mem.hidden_units[x] = nil
                                 end
                             end
@@ -445,6 +836,7 @@ if not IntroCinematicManager then
                                     )
 
                                     self.mem.units[n] = unit
+                                    self:_protect_unit_from_cinematic_culling(unit, true)
                                 end
                             end
                         end    
@@ -614,6 +1006,8 @@ if not IntroCinematicManager then
 
                     self.cine_cam_unit:set_position(self.mem.pos_rot[1])
                     self.cine_cam_unit:set_rotation(self.mem.pos_rot[2])
+                    self:_sync_waiting_camera_to_cinematic_camera()
+                    self:_refresh_cinematic_culling_lock(t, false)
 
                     if self._update then
                         self._update(self.starting_time + (map_data.hologram.start or 0) * 0.01 * map_data.length,t,dt)
@@ -661,6 +1055,13 @@ if not IntroCinematicManager then
     end
 
     function IntroCinematicManager:cleanup()
+        self:_end_cinematic_culling_lock()
+        self:_end_portal_cinematic_lock()
+
+        if not self.mem then
+            return
+        end
+
         for _,k in pairs(self.mem.overlay_effects) do
             managers.overlay_effect:stop_effect(k)
         end
@@ -722,6 +1123,9 @@ if not IntroCinematicManager then
     end
 
     function IntroCinematicManager:on_end()
+        self:_end_cinematic_culling_lock()
+        self:_end_portal_cinematic_lock()
+
         if self.hologram then
             self.hologram:get_panel():set_visible(false)
             self.hologram:destroy()
@@ -736,11 +1140,21 @@ if not IntroCinematicManager then
                 managers.gui_data:destroy_workspace(self.blackbar_ws)
             end
         end
-        if self._cine_active then
-            -- Also destroy all the shit with it
-            self.cine_cam_unit:camera():destroy()
+        if self._cine_active and alive(self.cine_cam_unit) then
+            -- Also destroy all the shit with it. Only the custom cinematic camera is
+            -- used in this build, so destroying it cannot kill the game's stock camera.
+            self:_safe_call(function()
+                self.cine_cam_unit:camera():destroy()
+            end)
         end
 
+        self._cine_active = false
+        self._waiting_cam_unit = nil
+        self.cine_cam_unit = nil
+        self.cine_cam = nil
+        self.hologram = nil
+        self.blackbar_ws = nil
+        self._playing = false
         self.done = true
     end
 end
