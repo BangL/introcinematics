@@ -1,10 +1,15 @@
 {
 	"name": "Intro Cinematics",
 	"description": "Intro Cinematics add cinematics to Payday 2",
-	"author": "vaultboy/ThuverX",
-	"contact": "https://discord.gg/QH8U8m9",
-	"version": "128",
+	"author": "ThuverX, vaultboy, BangL",
+	"version": "129",
 	"priority": 0,
+	"updates": [{
+		"identifier": "introcinematics",
+		"host": {
+			"meta": "https://gitlab.com/payday2-mods/updates/-/raw/master/introcinematics.json"
+		}
+	}],
 	"hooks": [
 		{
 			"hook_id": "lib/setups/setup",
