@@ -50,11 +50,13 @@ Hooks:PostHook(LevelsTweakData, "init", "F_"..Idstring("PostHook:init:LevelsTwea
     ✅  Beneath The Mountain    - pbr
     ✅  Birth Of Sky            - pbr2
     ✅  Goat Simulator          - peta
+    ❌  Goat Simulator day 2    - peta2                 // Dirty work
     ✅  Counterfeit             - pal
     ✅  Undercover              - man
     ✅  Boiling Point           - mad
     ✅  Murky Station           - dark
-    ✅  The Bike Heist          - born
+    ✅  The Biker Heist         - born
+    ❌  The Biker Heist day 2   - chew                  // Interception
     ❌  Safe House              - chill
     ✅  Safe House Raid         - chill_combat
     ✅  Scarface Mansion        - friend
@@ -90,6 +92,12 @@ Hooks:PostHook(LevelsTweakData, "init", "F_"..Idstring("PostHook:init:LevelsTwea
     ✅  Lost in Transit         - trai
     ✅  Hostile Takeover        - corp
     ✅  Crude Awakening         - deep
+    ❌  Santa's Workshop        - cane
+    ❌  Lab Rats                - nail
+    ❌  Under the Hammer        - auc
+
+    ❌  Tutorial: Stealth       - short1_stage1 / short1_stage2   // Flash Drive / Erasing History
+    ❌  Tutorial: Loud          - short2_stage1 / short2_stage2b  // Get The Coke / Plan B
 
     ]]
 
@@ -1279,6 +1287,7 @@ Hooks:PostHook(LevelsTweakData, "init", "F_"..Idstring("PostHook:init:LevelsTwea
             start = 44
         }
     }
+    self.mia2_new.cine_data = deep_clone(self.mia_2.cine_data)
 
     self.hox_1.cine_data = {
         timeline = {
@@ -1550,6 +1559,7 @@ Hooks:PostHook(LevelsTweakData, "init", "F_"..Idstring("PostHook:init:LevelsTwea
             start = 65
         }
     }
+    self.crojob3_night.cine_data = deep_clone(self.crojob3.cine_data)
 
     self.shoutout_raid.cine_data = {
         timeline = {
