@@ -269,7 +269,10 @@ if not IntroCinematicManager then
             self:_set_unit_skip_occlusion(unit, true)
         end
 
-        if not already_skip then
+        -- remove_occlusion() is reference counted: every call needs its add_occlusion()
+        -- again, even if someone else already skips this unit. Only the plain
+        -- set_skip_occlusion fallback may leave an already skipped unit alone.
+        if used_manager or not already_skip then
             table.insert(lock.restore_units, unit)
         end
     end
