@@ -514,11 +514,17 @@ if not IntroCinematicManager then
             -- current counters (i = 0).
             for _, unit in pairs(lock.shown) do
                 if alive(unit) and not self:_is_intro_hidden_unit(unit) then
-                    self:_safe_call(function()
-                        local inverse = unit:unit_data().portal_visible_inverse
+                    if portal._all_units and portal._all_units[unit:key()] then
+                        self:_safe_call(function()
+                            local inverse = unit:unit_data().portal_visible_inverse
 
-                        lock.change_visibility(portal, unit, 0, inverse)
-                    end)
+                            lock.change_visibility(portal, unit, 0, inverse)
+                        end)
+                    else
+                        -- no portal counter for this unit (e.g. it was only in the hide list), so
+                        -- change_visibility would fail: put it back to hidden like it was before
+                        self:_safe_set_unit_visible(unit, false)
+                    end
                 end
             end
         end
