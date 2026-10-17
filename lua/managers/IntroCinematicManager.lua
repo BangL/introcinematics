@@ -373,6 +373,16 @@ if not IntroCinematicManager then
             return
         end
 
+        local lock = self._portal_cinematic_lock
+
+        if lock and not self:_unit_visible(unit) then
+            local key = self:_unit_key(unit)
+
+            if key then
+                lock.shown[key] = unit
+            end
+        end
+
         self:_safe_set_unit_visible(unit, true)
     end
 
@@ -427,7 +437,9 @@ if not IntroCinematicManager then
             -- instance overrides we replaced (nil = the class method was in use)
             own_render = rawget(portal, "render"),
             own_add_to_hide_list = rawget(portal, "add_to_hide_list"),
-            own_change_visibility = rawget(portal, "change_visibility")
+            own_change_visibility = rawget(portal, "change_visibility"),
+            -- units we forced visible that the portal system had hidden
+            shown = {}
         }
 
         self._portal_cinematic_lock = lock
@@ -494,6 +506,19 @@ if not IntroCinematicManager then
             portal.render = lock.own_render
             portal.add_to_hide_list = lock.own_add_to_hide_list
             portal.change_visibility = lock.own_change_visibility
+
+            -- The portal system only touches a unit when its shape toggles, so units we
+            -- forced visible would stay visible. Let it recompute their state from the
+            -- current counters (i = 0).
+            for _, unit in pairs(lock.shown) do
+                if alive(unit) and not self:_is_intro_hidden_unit(unit) then
+                    self:_safe_call(function()
+                        local inverse = unit:unit_data().portal_visible_inverse
+
+                        lock.change_visibility(portal, unit, 0, inverse)
+                    end)
+                end
+            end
         end
     end
 
