@@ -129,6 +129,8 @@ if not ThuverX_CinematicCamera then
     
 end
 
+local SKIP_FADE_TIME = 0.6
+
 if not IntroCinematicManager then
     IntroCinematicManager = class()
 
@@ -1051,8 +1053,23 @@ if not IntroCinematicManager then
                     end
 
                     if waiting_state._skipped and not self.skipped then
-                        waiting_state._delay_start_t = t + 2
+                        -- Skip: short fade to black, then end right after it
+                        waiting_state._delay_start_t = t + SKIP_FADE_TIME
                         self.skipped = true
+
+                        for _,k in pairs(self.mem.overlay_effects) do
+                            managers.overlay_effect:stop_effect(k)
+                        end
+
+                        local o_ef_id = managers.overlay_effect:play_effect({
+                            blend_mode = "normal",
+                            play_paused = true,
+                            fade_in = SKIP_FADE_TIME,
+                            fade_out = 0,
+                            color = Color(1, 0, 0, 0),
+                            timer = TimerManager:main()
+                        })
+                        table.insert(self.mem.overlay_effects,o_ef_id)
                     end
 
                     if waiting_state._fadeout_loading_icon and waiting_state._fadeout_loading_icon._panel then
@@ -1086,8 +1103,8 @@ if not IntroCinematicManager then
     end
 
     function IntroCinematicManager:delay_hook()
-        -- map_data/waiting_state outlive the cinematic, only act while one is playing
-        if self._playing and self.map_data then
+        -- A skip has set its own (short) delay, don't push it back to the end
+        if self._playing and self.map_data and not self.waiting_state._skipped then
             self.waiting_state._delay_start_t = self.starting_time + self.map_data.length
         end
     end
