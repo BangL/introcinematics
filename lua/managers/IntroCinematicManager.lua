@@ -423,7 +423,11 @@ if not IntroCinematicManager then
             portal = portal,
             render = portal.render,
             add_to_hide_list = portal.add_to_hide_list,
-            change_visibility = portal.change_visibility
+            change_visibility = portal.change_visibility,
+            -- instance overrides we replaced (nil = the class method was in use)
+            own_render = rawget(portal, "render"),
+            own_add_to_hide_list = rawget(portal, "add_to_hide_list"),
+            own_change_visibility = rawget(portal, "change_visibility")
         }
 
         self._portal_cinematic_lock = lock
@@ -484,9 +488,12 @@ if not IntroCinematicManager then
         local portal = lock.portal
 
         if portal then
-            portal.render = lock.render
-            portal.add_to_hide_list = lock.add_to_hide_list
-            portal.change_visibility = lock.change_visibility
+            -- Put back what was there. Assigning the class method to the instance would
+            -- shadow the class, so later overrides of it (e.g. after a lua reload) would
+            -- be ignored.
+            portal.render = lock.own_render
+            portal.add_to_hide_list = lock.own_add_to_hide_list
+            portal.change_visibility = lock.own_change_visibility
         end
     end
 
