@@ -793,8 +793,10 @@ if not IntroCinematicManager then
                         end
 
                         if stage.unhide_units then
-                            for x,unit in pairs(stage.unhide_units) do
-                                if self.mem.hidden_units[x] then
+                            for _,x in pairs(stage.unhide_units) do
+                                local unit = self.mem.hidden_units[x]
+
+                                if unit then
                                     if unit.set_visible then unit:set_visible(true)
                                     else unit:set_enabled(true) end
 
