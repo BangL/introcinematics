@@ -77,7 +77,7 @@ function IntroCinematicDifficultyHologram(panel,data)
             end
         end
     else
-        local crime_spree_amount = managers.crime_spree:spree_level()
+        local crime_spree_amount = managers.crime_spree:server_spree_level() or 0
         local icon = difficulty_panel:panel({
             name = "crime_spree_icon_panel",
             y = difficulty_panel:w() / 6,

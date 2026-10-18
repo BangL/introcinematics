@@ -2,7 +2,7 @@
 	"name": "Intro Cinematics",
 	"description": "Intro Cinematics add cinematics to Payday 2",
 	"author": "ThuverX, vaultboy, BangL",
-	"version": "130",
+	"version": "131",
 	"priority": 0,
 	"updates": [{
 		"identifier": "introcinematics",
